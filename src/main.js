@@ -65,6 +65,8 @@ function analyzeSalesData(data, options) {
         throw new Error("Опции должны содержать функции calculateRevenue и calculateBonus!");
     }
 
+    const round2 = (num) => Math.round(num * 100) / 100;
+
     // Подготовка промежуточных данных для сбора статистики
     const sellerStats = data.sellers.map((seller) => ({
         seller_id: seller.id,
@@ -91,18 +93,16 @@ function analyzeSalesData(data, options) {
         
         seller.sales_count += 1;
         
-        // Расчет revenue через перебор items
-        let recordRevenue = 0;
-        
         record.items.forEach((item) => {
             const product = productIndex[item.sku];
             if (!product) return;
 
-            const revenue = options.calculateRevenue(item, product);
-            const profit = revenue - (product.purchase_price * item.quantity);
+            const revenue = round2(options.calculateRevenue(item, product));
+            const cost = round2(product.purchase_price * item.quantity);
+            const profit = round2(revenue - cost);
             
-            seller.revenue += revenue;
-            seller.profit += profit;
+            seller.revenue = round2(seller.revenue + revenue);
+            seller.profit = round2(seller.profit + profit);
 
             if (!seller.products_sold[item.sku]) {
                 seller.products_sold[item.sku] = 0;
@@ -121,8 +121,7 @@ function analyzeSalesData(data, options) {
 
     // Назначение премий на основе ранжирования
     sellerStats.forEach((seller, index) => {
-        seller.bonus = options.calculateBonus(index, sellerStats.length, seller);
-        seller.bonus = Math.round(seller.bonus * 100) / 100;
+        seller.bonus = round2(options.calculateBonus(index, sellerStats.length, seller));
         
         seller.top_products = Object.entries(seller.products_sold)
             .map(([sku, quantity]) => ({
