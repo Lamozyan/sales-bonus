@@ -65,7 +65,7 @@ function analyzeSalesData(data, options) {
         throw new Error("Опции должны содержать функции calculateRevenue и calculateBonus!");
     }
 
-    const toKopecks = (rubles) => Math.round(rubles * 100);
+    const toKopecks = (rubles) => Math.floor(rubles * 100);
     const fromKopecks = (kopecks) => kopecks / 100;
 
     // Подготовка промежуточных данных для сбора статистики
