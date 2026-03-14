@@ -39,16 +39,33 @@ function calculateBonusByProfit(index, total, seller) {
  */
 function analyzeSalesData(data, options) {
     // Проверка входных данных
-    if (!data || !Array.isArray(data.sellers) || !Array.isArray(data.products) || !Array.isArray(data.purchase_records)) {
+    if (
+        !data ||
+        !Array.isArray(data.sellers) ||
+        !Array.isArray(data.products) ||
+        !Array.isArray(data.purchase_records)
+    ) {
         throw new Error("Некорректные входные данные!");
     }
+    
+    if (
+        data.sellers.length === 0 ||
+        data.products.length === 0 ||
+        data.purchase_records.length === 0
+    ) {
+        throw new Error("Переданные коллекции пустые!");
+    }
 
-    // Проверка наличия опций
-    if (!options || typeof options.calculateRevenue !== "function" || typeof options.calculateBonus !== "function") {
+    // Проверка наличия опций - ИСПРАВЛЕНО
+    if (
+        !options ||
+        typeof options.calculateRevenue !== "function" ||
+        typeof options.calculateBonus !== "function"
+    ) {
         throw new Error("Опции должны содержать функции calculateRevenue и calculateBonus!");
     }
 
-    // Подготовка промежуточных данных
+    // Подготовка промежуточных данных для сбора статистики
     const sellerStats = data.sellers.map((seller) => ({
         seller_id: seller.id,
         name: `${seller.first_name} ${seller.last_name}`,
@@ -58,24 +75,30 @@ function analyzeSalesData(data, options) {
         products_sold: {},
     }));
 
-    // Индексация
-    const sellerIndex = Object.fromEntries(sellerStats.map((seller) => [seller.seller_id, seller]));
-    const productIndex = Object.fromEntries(data.products.map((product) => [product.sku, product]));
+    // Индексация продавцов и товаров для быстрого доступа
+    const sellerIndex = Object.fromEntries(
+        sellerStats.map((seller) => [seller.seller_id, seller])
+    );
+    
+    const productIndex = Object.fromEntries(
+        data.products.map((product) => [product.sku, product])
+    );
 
-    // Расчет выручки и прибыли
+    // Расчет выручки и прибыли для каждого продавца
     data.purchase_records.forEach((record) => {
         const seller = sellerIndex[record.seller_id];
         if (!seller) return;
         
         seller.sales_count += 1;
         
+        // Расчет revenue через перебор items - ИСПРАВЛЕНО
         let recordRevenue = 0;
         
         record.items.forEach((item) => {
             const product = productIndex[item.sku];
             if (!product) return;
 
-            // ОКРУГЛЯЕМ revenue до 2 знаков сразу при вычислении
+            // ИСПРАВЛЕНО - используем options.calculateRevenue
             const revenue = Number((options.calculateRevenue(item, product)).toFixed(2));
             const profit = Number((revenue - (product.purchase_price * item.quantity)).toFixed(2));
             
@@ -91,28 +114,30 @@ function analyzeSalesData(data, options) {
         seller.revenue = Number((seller.revenue + recordRevenue).toFixed(2));
     });
 
-    // Сортировка
+    // Сортировка продавцов по прибыли
     sellerStats.sort((a, b) => b.profit - a.profit);
 
-    // Назначение премий
+    // Назначение премий на основе ранжирования
     sellerStats.forEach((seller, index) => {
         seller.bonus = options.calculateBonus(index, sellerStats.length, seller);
         
-        // Топ продукты
-        seller.top_products = Object.entries(seller.products_sold || {})
-            .map(([sku, quantity]) => ({ sku, quantity }))
+        seller.top_products = Object.entries(seller.products_sold)
+            .map(([sku, quantity]) => ({
+                sku,
+                quantity,
+            }))
             .sort((a, b) => b.quantity - a.quantity)
             .slice(0, 10);
     });
 
-    // Подготовка результата
+    // Подготовка итоговой коллекции с нужными полями
     return sellerStats.map((seller) => ({
         seller_id: seller.seller_id,
         name: seller.name,
-        revenue: seller.revenue,
-        profit: seller.profit,
+        revenue: +seller.revenue.toFixed(2),
+        profit: +seller.profit.toFixed(2),
         sales_count: seller.sales_count,
-        top_products: seller.top_products || [],
-        bonus: Number(seller.bonus.toFixed(2)),
+        top_products: seller.top_products,
+        bonus: +seller.bonus.toFixed(2),
     }));
 }
