@@ -65,6 +65,9 @@ function analyzeSalesData(data, options) {
         throw new Error("Опции должны содержать функции calculateRevenue и calculateBonus!");
     }
 
+    const toKopecks = (rubles) => Math.round(rubles * 100);
+    const fromKopecks = (kopecks) => kopecks / 100;
+
     // Подготовка промежуточных данных для сбора статистики
     const sellerStats = data.sellers.map((seller) => ({
         seller_id: seller.id,
@@ -81,7 +84,7 @@ function analyzeSalesData(data, options) {
     );
     
     const productIndex = Object.fromEntries(
-        data.products.map((product) => [product.sku, product])
+        data.products.map((product) => [product.sku, {product, purchase_price_kopecks: toKopecks(product.purchase_price)}])
     );
 
     // Расчет выручки и прибыли для каждого продавца
@@ -95,12 +98,13 @@ function analyzeSalesData(data, options) {
             const product = productIndex[item.sku];
             if (!product) return;
 
-            const revenue = options.calculateRevenue(item, product);
-            const cost = product.purchase_price * item.quantity;
-            const profit = revenue - cost;
+            const revenueRub = options.calculateRevenue(item, product);
+            const revenueKopecks = toKopecks(revenueRub);
+            const costKopecks = product.purchase_price_kopecks * item.quantity;
+            const profitKopecks = revenueKopecks - costKopecks;
             
-            seller.revenue += revenue;
-            seller.profit += profit;
+            seller.revenue += revenueKopecks;
+            seller.profit += profitKopecks;
 
             if (!seller.products_sold[item.sku]) {
                 seller.products_sold[item.sku] = 0;
@@ -110,7 +114,7 @@ function analyzeSalesData(data, options) {
     });
 
     sellerStats.forEach(seller => {
-        seller.profit = Math.round(seller.profit * 100) / 100;
+        seller.profitRub = fromKopecks(seller.profit);
     });
 
     // Сортировка продавцов по прибыли
@@ -118,9 +122,9 @@ function analyzeSalesData(data, options) {
 
     // Назначение премий на основе ранжирования
     sellerStats.forEach((seller, index) => {
-        seller.bonus = options.calculateBonus(index, sellerStats.length, seller);
-        seller.bonus = Math.round(seller.bonus * 100) / 100;
-        seller.revenue = Math.round(seller.revenue * 100) / 100;
+        const sellerForBonus = {seller, profit: seller.profitRub};
+        const bonusRub = options.calculateBonus(index, sellerStats.length, sellerForBonus);
+        seller.bonusRub = Math.round(bonusRub * 100) / 100;
         
         seller.top_products = Object.entries(seller.products_sold)
             .map(([sku, quantity]) => ({
@@ -135,10 +139,10 @@ function analyzeSalesData(data, options) {
     return sellerStats.map((seller) => ({
         seller_id: seller.seller_id,
         name: seller.name,
-        revenue: seller.revenue,
-        profit: seller.profit,
+        revenue: fromKopecks(seller.revenue),
+        profit: seller.profitRub,
         sales_count: seller.sales_count,
         top_products: seller.top_products,
-        bonus: seller.bonus,
+        bonus: seller.bonusRub,
     }));
 }
