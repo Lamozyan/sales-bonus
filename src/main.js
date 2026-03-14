@@ -65,7 +65,8 @@ function analyzeSalesData(data, options) {
         throw new Error("Опции должны содержать функции calculateRevenue и calculateBonus!");
     }
 
-    const round2 = (num) => Math.round(num * 100) / 100;
+    const toKopecks = (rubles) => Math.round(rubles * 100);
+    const fromKopecks = (kopecks) => kopecks / 100;
 
     // Подготовка промежуточных данных для сбора статистики
     const sellerStats = data.sellers.map((seller) => ({
@@ -83,7 +84,7 @@ function analyzeSalesData(data, options) {
     );
     
     const productIndex = Object.fromEntries(
-        data.products.map((product) => [product.sku, product])
+        data.products.map((product) => [product.sku, {product, purchase_price_kopecks: toKopecks(product.purchase_price)}])
     );
 
     // Расчет выручки и прибыли для каждого продавца
@@ -93,27 +94,26 @@ function analyzeSalesData(data, options) {
         
         seller.sales_count += 1;
         
-        // Расчет revenue через перебор items - ИСПРАВЛЕНО
+        // Расчет revenue через перебор items
         let recordRevenue = 0;
         
         record.items.forEach((item) => {
             const product = productIndex[item.sku];
             if (!product) return;
 
-            const revenue = round2(options.calculateRevenue(item, product));
-            const cost = round2(product.purchase_price * item.quantity);
-            const profit = round2(revenue - cost);
+            const revenueRub = options.calculateRevenue(item, product);
+            const revenueKopecks = toKopecks(revenueRub);
+            const costKopecks = product.purchase_price_kopecks * item.quantity;
+            const profitKopecks = revenueKopecks - costKopecks;
             
-            seller.profit = round2(seller.profit + profit);
-            recordRevenue = round2(recordRevenue + revenue);
+            seller.revenue += revenueKopecks;
+            seller.profit += profitKopecks;
 
             if (!seller.products_sold[item.sku]) {
                 seller.products_sold[item.sku] = 0;
             }
             seller.products_sold[item.sku] += item.quantity;
         });
-        
-        seller.revenue = round2(seller.revenue + recordRevenue);
     });
 
     // Сортировка продавцов по прибыли
@@ -121,7 +121,9 @@ function analyzeSalesData(data, options) {
 
     // Назначение премий на основе ранжирования
     sellerStats.forEach((seller, index) => {
-        seller.bonus = round2(options.calculateBonus(index, sellerStats.length, seller));
+        const sellerForBonus = {seller, profit: fromKopecks(seller.profit)};
+        const bonusRub = options.calculateBonus(index, sellerStats.length, sellerForBonus);
+        seller.bonus = toKopecks(bonusRub);
         
         seller.top_products = Object.entries(seller.products_sold)
             .map(([sku, quantity]) => ({
@@ -136,10 +138,10 @@ function analyzeSalesData(data, options) {
     return sellerStats.map((seller) => ({
         seller_id: seller.seller_id,
         name: seller.name,
-        revenue: seller.revenue,
-        profit: seller.profit,
+        revenue: fromKopecks(seller.revenue),
+        profit: fromKopecks(seller.profit),
         sales_count: seller.sales_count,
         top_products: seller.top_products,
-        bonus: seller.bonus,
+        bonus: fromKopecks(seller.bonus),
     }));
 }
