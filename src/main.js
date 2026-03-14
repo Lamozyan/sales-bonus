@@ -56,7 +56,7 @@ function analyzeSalesData(data, options) {
         throw new Error("Переданные коллекции пустые!");
     }
 
-    // Проверка наличия опций - ИСПРАВЛЕНО
+    // Проверка наличия опций
     if (
         !options ||
         typeof options.calculateRevenue !== "function" ||
@@ -64,6 +64,8 @@ function analyzeSalesData(data, options) {
     ) {
         throw new Error("Опции должны содержать функции calculateRevenue и calculateBonus!");
     }
+
+    const round2 = (num) => Math.round(num * 100) / 100;
 
     // Подготовка промежуточных данных для сбора статистики
     const sellerStats = data.sellers.map((seller) => ({
@@ -98,12 +100,12 @@ function analyzeSalesData(data, options) {
             const product = productIndex[item.sku];
             if (!product) return;
 
-            // ИСПРАВЛЕНО - используем options.calculateRevenue
-            const revenue = Number((options.calculateRevenue(item, product)).toFixed(2));
-            const profit = Number((revenue - (product.purchase_price * item.quantity)).toFixed(2));
+            const revenue = round2(options.calculateRevenue(item, product));
+            const cost = round2(product.purchase_price * item.quantity);
+            const profit = round2(revenue - cost);
             
-            seller.profit = Number((seller.profit + profit).toFixed(2));
-            recordRevenue = Number((recordRevenue + revenue).toFixed(2));
+            seller.profit = round2(seller.profit + profit);
+            recordRevenue = round2(recordRevenue + revenue);
 
             if (!seller.products_sold[item.sku]) {
                 seller.products_sold[item.sku] = 0;
@@ -111,7 +113,7 @@ function analyzeSalesData(data, options) {
             seller.products_sold[item.sku] += item.quantity;
         });
         
-        seller.revenue = Number((seller.revenue + recordRevenue).toFixed(2));
+        seller.revenue = round2(seller.revenue + recordRevenue);
     });
 
     // Сортировка продавцов по прибыли
@@ -119,7 +121,7 @@ function analyzeSalesData(data, options) {
 
     // Назначение премий на основе ранжирования
     sellerStats.forEach((seller, index) => {
-        seller.bonus = options.calculateBonus(index, sellerStats.length, seller);
+        seller.bonus = round2(options.calculateBonus(index, sellerStats.length, seller));
         
         seller.top_products = Object.entries(seller.products_sold)
             .map(([sku, quantity]) => ({
@@ -134,10 +136,10 @@ function analyzeSalesData(data, options) {
     return sellerStats.map((seller) => ({
         seller_id: seller.seller_id,
         name: seller.name,
-        revenue: +seller.revenue.toFixed(2),
-        profit: +seller.profit.toFixed(2),
+        revenue: seller.revenue,
+        profit: seller.profit,
         sales_count: seller.sales_count,
         top_products: seller.top_products,
-        bonus: +seller.bonus.toFixed(2),
+        bonus: seller.bonus,
     }));
 }
