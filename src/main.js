@@ -99,18 +99,23 @@ function analyzeSalesData(data, options) {
             const product = productIndex[item.sku];
             if (!product) return;
 
-            const revenue = roundMoney(options.calculateRevenue(item, product));
-            const cost = roundMoney(product.purchase_price * item.quantity);
-            const profit = roundMoney(revenue - cost);
+            const revenue = options.calculateRevenue(item, product);
+            const cost = product.purchase_price * item.quantity;
+            const profit = revenue - cost;
             
-            seller.revenue = roundMoney(seller.revenue + revenue);
-            seller.profit = roundMoney(seller.profit + profit);
+            seller.revenue += revenue;
+            seller.profit += profit;
 
             if (!seller.products_sold[item.sku]) {
                 seller.products_sold[item.sku] = 0;
             }
             seller.products_sold[item.sku] += item.quantity;
         });
+    });
+
+    sellerStats.forEach(seller => {
+        seller.revenue = roundMoney(seller.revenue);
+        seller.profit = roundMoney(seller.profit);
     });
 
     // Сортировка продавцов по прибыли
